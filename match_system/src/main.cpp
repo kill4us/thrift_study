@@ -2,10 +2,13 @@
 // You should copy it to another filename to avoid overwriting it.
 
 #include "match_server/Match.h"
+#include "save_client/Save.h"
 #include <thrift/protocol/TBinaryProtocol.h>
 #include <thrift/server/TSimpleServer.h>
 #include <thrift/transport/TServerSocket.h>
 #include <thrift/transport/TBufferTransports.h>
+#include <thrift/transport/TSocket.h>
+#include <thrift/transport/TTransportUtils.h>
 
 #include <iostream>
 #include <thread>
@@ -19,8 +22,8 @@ using namespace ::apache::thrift;
 using namespace ::apache::thrift::protocol;
 using namespace ::apache::thrift::transport;
 using namespace ::apache::thrift::server;
-
-using namespace  ::match_service;
+using namespace ::save_service;
+using namespace ::match_service;
 using namespace std;
 
 
@@ -58,6 +61,23 @@ class pool
         void save_result(int a, int b)
         {
             printf ("Match result: %d %d\n", a, b);
+
+            std::shared_ptr<TTransport> socket(new TSocket("123.57.67.128", 9090));
+            std::shared_ptr<TTransport> transport(new TBufferedTransport(socket));
+            std::shared_ptr<TProtocol> protocol(new TBinaryProtocol(transport));
+            SaveClient client(protocol);
+
+            try {
+                transport->open();
+                int res = client.save_data("acs_12131", "99e3b0bd", a, b);
+                if (!res) puts ("success");
+                else puts ("failed");
+
+
+                transport->close();
+            } catch (TException& tx) {
+                cout << "ERROR: " << tx.what() << endl;
+            }
         }
 
 
@@ -90,7 +110,7 @@ class MatchHandler : virtual public MatchIf {
         int32_t add_user(const User& user, const std::string& info) {
             // Your implementation goes here
             printf("add_user\n");
-            
+
             unique_lock<mutex> lck(message_queue.m);
             message_queue.q.push({user, "add"});
             message_queue.cv.notify_all(); //唤醒
@@ -101,7 +121,7 @@ class MatchHandler : virtual public MatchIf {
         int32_t remove_user(const User& user, const std::string& info) {
             // Your implementation goes here
             printf("remove_user\n");
-            
+
             unique_lock<mutex> lck(message_queue.m);
             message_queue.q.push({user, "remove"});
             message_queue.cv.notify_all();
@@ -150,7 +170,7 @@ int main(int argc, char **argv) {
     ::std::shared_ptr<TProtocolFactory> protocolFactory(new TBinaryProtocolFactory());
 
     TSimpleServer server(processor, serverTransport, transportFactory, protocolFactory);
-        
+
     cout << "start match_server" << endl;
 
     thread matching_thread(consume_task);
